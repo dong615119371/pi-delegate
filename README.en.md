@@ -8,14 +8,7 @@
   <img alt="models" src="https://img.shields.io/badge/models-free--tier%20only-brightgreen">
 </p>
 
-Outsource work to the [OpenCode](https://opencode.ai) CLI. One package, two tools, depending on what else is installed.
-
-| Tool | Needs async-jobs? | Behaviour |
-| --- | --- | --- |
-| `opencode` | No | **Synchronous.** Blocks until done, result in the same turn |
-| `delegate_async` | **Yes** | **Asynchronous.** Returns a job id at once, result arrives later as a message |
-
-Installed alone it is a working synchronous delegation tool; the asynchronous half never appears.
+Outsource work to the [OpenCode](https://opencode.ai) CLI.
 
 ## Why this exists
 
@@ -28,6 +21,17 @@ Pair it with [`pi-async-jobs`](https://github.com/dong615119371/pi-async-jobs) a
 > **Where the compliance comes from**: Zen free models no longer issue API keys, and they cannot be pulled out of the official OpenCode client by a reverse proxy or spoofed headers. If you want them, you use them inside OpenCode's own client and CLI.
 >
 > So this does none of that. Pi runs OpenCode's own command-line program, using its normal session and authentication. What the official CLI can do, this can do. What the official CLI cannot do, this does not either.
+
+## Two tools
+
+One package, two tools, depending on what else is installed.
+
+| Tool | Needs async-jobs? | Behaviour |
+| --- | --- | --- |
+| `opencode` | No | **Synchronous.** Blocks until done, result in the same turn |
+| `delegate_async` | **Yes** | **Asynchronous.** Returns a job id at once, result arrives later as a message |
+
+Installed alone it is a working synchronous delegation tool; the asynchronous half never appears.
 
 ## The ecosystem
 

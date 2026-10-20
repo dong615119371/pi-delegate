@@ -8,14 +8,7 @@
   <img alt="models" src="https://img.shields.io/badge/models-free--tier%20only-brightgreen">
 </p>
 
-把活外包给 [OpenCode](https://opencode.ai) CLI。装一个包，按环境给你两种工具。
-
-| 工具 | 需要 async-jobs？ | 行为 |
-| --- | --- | --- |
-| `opencode` | 不要 | **同步**。阻塞到干完，同一回合拿结果 |
-| `delegate_async` | **要** | **异步**。丢出去立刻返回作业号，结果稍后作为新消息回来 |
-
-单独装就是一把可用的同步委派工具，多出来的异步半个不会冒出来。
+把活外包给 [OpenCode](https://opencode.ai) CLI。
 
 ## 为什么做这个
 
@@ -28,6 +21,17 @@
 > **合规在哪里**：Zen 免费模型已经不提供 API key，也不能被反向代理、伪造请求头带出 OpenCode 官方客户端。想用，就只能在 OpenCode 自己的客户端和 CLI 里用。
 >
 > 所以这里不做这些事。Pi 调用的就是 OpenCode 自己的命令行程序，走它正常的会话与认证。官方 CLI 能做的，这里就能做；官方 CLI 不能做的，这里也不做。
+
+## 两个工具
+
+装一个包，按环境给你两种。
+
+| 工具 | 需要 async-jobs？ | 行为 |
+| --- | --- | --- |
+| `opencode` | 不要 | **同步**。阻塞到干完，同一回合拿结果 |
+| `delegate_async` | **要** | **异步**。丢出去立刻返回作业号，结果稍后作为新消息回来 |
+
+单独装就是一把可用的同步委派工具，多出来的异步半个不会冒出来。
 
 ## 生态
 
