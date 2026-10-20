@@ -17,6 +17,18 @@ Outsource work to the [OpenCode](https://opencode.ai) CLI. One package, two tool
 
 Installed alone it is a working synchronous delegation tool; the asynchronous half never appears.
 
+## Why this exists
+
+OpenCode has tightened external calls to its Zen free models, which left a lot of us with no free model to lean on. So here is **pi-delegate**:
+
+A **fully compliant** alternative. It does not expose the OpenCode free models directly. It drives another agent — Pi, in this case — through the **official CLI** to hand out and schedule the work.
+
+Pair it with [`pi-async-jobs`](https://github.com/dong615119371/pi-async-jobs) and the throughput gains get frankly ridiculous.
+
+> **Where the compliance comes from**: Zen free models no longer issue API keys, and they cannot be pulled out of the official OpenCode client by a reverse proxy or spoofed headers. If you want them, you use them inside OpenCode's own client and CLI.
+>
+> So this does none of that. Pi runs OpenCode's own command-line program, using its normal session and authentication. What the official CLI can do, this can do. What the official CLI cannot do, this does not either.
+
 ## The ecosystem
 
 | Package | What it is |
