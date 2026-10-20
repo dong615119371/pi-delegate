@@ -81,8 +81,8 @@ function formatTokens(count: number): string {
  * be hallucinated. A report on a 2762-line file produced from 132 read lines is a different
  * risk from one produced from all of it, and without this the caller cannot tell.
  *
- * Mirrors formatCoverage() in `../async-jobs/opencode-channel.ts`; the two extensions load
- * independently, so this is a deliberate duplicate - change both.
+ * Mirrors formatCoverage() in the async-jobs host's renderer; the two packages load
+ * independently and cannot share code, so this is a deliberate duplicate. Change both.
  */
 function formatCoverage(result: OpenCodeRunResult): string {
 	const perFile = new Map<string, number>();

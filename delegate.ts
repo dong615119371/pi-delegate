@@ -1,5 +1,5 @@
 /**
- * opencode-delegate - the OpenCode delegate channel and the `delegate_async` tool.
+ * pi-delegate - the OpenCode delegate channel and the `delegate_async` tool.
  *
  * This package is a *consumer* of the async-jobs host. It does not import the host
  * package: Pi gives each extension its own module graph, so an imported `channels.ts`
