@@ -1,13 +1,33 @@
 # pi-delegate
 
-把活外包给 OpenCode CLI。装一个包，按环境给你两种工具。
+> 中文说明 · [English](README.en.md)
+
+<p>
+  <img alt="version" src="https://img.shields.io/badge/version-0.1.0-orange">
+  <img alt="license" src="https://img.shields.io/badge/license-MIT-lightgrey">
+  <img alt="models" src="https://img.shields.io/badge/models-free--tier%20only-brightgreen">
+</p>
+
+把活外包给 [OpenCode](https://opencode.ai) CLI。装一个包，按环境给你两种工具。
 
 | 工具 | 需要 async-jobs？ | 行为 |
 | --- | --- | --- |
 | `opencode` | 不要 | **同步**。阻塞到干完，同一回合拿结果 |
 | `delegate_async` | **要** | **异步**。丢出去立刻返回作业号，结果稍后作为新消息回来 |
 
-单独装就是一把可用的同步委派工具，多出来的异步半个不会冒出来。装上 [`pi-async-jobs`](https://github.com/dong615119371/pi-async-jobs)，异步那半自己开。
+单独装就是一把可用的同步委派工具，多出来的异步半个不会冒出来。
+
+## 生态
+
+| 包 | 是什么 |
+| --- | --- |
+| [`pi-async-jobs`](https://github.com/dong615119371/pi-async-jobs) | **宿主**：后台作业调度核心。本包向它借能力 |
+| **`pi-delegate`**（本仓） | **消费者**：第一个接入该服务的扩展 |
+
+两个包**独立仓库、独立版本、独立发布节奏**，运行时靠 `pi.events` 握手，没有任何编译期依赖。
+
+- 只装本包 → 同步外包，可用
+- 再装宿主 → `delegate_async` 自动激活，异步外包也可用
 
 ## 装
 
@@ -19,6 +39,8 @@ pi install git:github.com/dong615119371/pi-delegate@v0.1.0
 pi install git:github.com/dong615119371/pi-async-jobs@v0.2.0
 pi install git:github.com/dong615119371/pi-delegate@v0.1.0
 ```
+
+> 宿主必须是 **v0.2.0 或更高**——`host.ts`（宿主服务）是 0.2.0 才有的。装 0.1.x 的话 `delegate_async` 不会激活。
 
 ## 什么时候用哪个
 
@@ -37,7 +59,7 @@ pi install git:github.com/dong615119371/pi-delegate@v0.1.0
 
 所以走 `pi.events`：Pi 每个 runtime 建一个总线，发给所有扩展。同一实例，不序列化，函数引用能原样传过去。`consumer.ts` 是接宿主的模板。
 
-宿主不出现时 `activate()` 返回 false，`delegate_async` 就停在注册未激活的状态。
+宿主不出现时 `activate()` 返回 false，`delegate_async` 就停在注册未激活的状态。版本不兼容时它同样拒绝激活，并在控制台留下原因——不会等到某次调用才在工具内部抛错。
 
 ## 硬性约束
 
@@ -67,6 +89,7 @@ This isn't related to your account.
 | `consumer.ts` | 接 async-jobs 宿主的模板 |
 | `cli.ts` | opencode-cli 封装 |
 | `models.ts` | 免费模型列表缓存 |
+| `skills/delegate-work/` | 用法手册：该不该外包、选模型、多轮审查 |
 
 ## License
 

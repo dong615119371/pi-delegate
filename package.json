@@ -28,7 +28,8 @@
     "models.ts",
     "skills/**/*.md",
     "README.md",
-    "LICENSE"
+    "LICENSE",
+    "README.en.md"
   ],
   "peerDependencies": {
     "@earendil-works/pi-coding-agent": "*",
