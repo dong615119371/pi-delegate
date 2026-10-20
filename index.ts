@@ -256,8 +256,8 @@ export default function (pi: ExtensionAPI) {
 			"so every path inside a task must be absolute. Relative paths will silently point at the wrong place.",
 			"This call BLOCKS until the work is done, so the result is available within the same turn.",
 			"Use it when the next step needs that result - dependent work such as change -> test -> read -> change.",
-			"When you have other work to do meanwhile, async delegation is the better shape.",
-			"(That is `delegate_async`, offered by this same package when the async-jobs host is installed. It fires the job and returns immediately. Pick sync only when you must wait anyway.)",
+			"When you have other work to do meanwhile, async delegation is the better shape",
+			"if `delegate_async` is among your tools - it fires the job and returns immediately. Pick this one when you must wait anyway.",
 		].join(" "),
 		parameters: OpencodeParams,
 
