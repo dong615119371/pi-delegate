@@ -16,7 +16,7 @@
 pi install git:github.com/dong615119371/pi-delegate@v0.1.0
 
 # 同步 + 异步
-pi install git:github.com/dong615119371/pi-async-jobs@v0.1.3
+pi install git:github.com/dong615119371/pi-async-jobs@v0.2.0
 pi install git:github.com/dong615119371/pi-delegate@v0.1.0
 ```
 
