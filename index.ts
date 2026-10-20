@@ -545,14 +545,24 @@ export default function (pi: ExtensionAPI) {
 	// depends on the host showing up, which is not knowable at factory time.
 	const activateAsync = registerDelegateTool(pi);
 
+	// A host whose API version does not match is reported once and then left alone.
+	// Staying quiet would mean the model calls a tool that throws from inside, which
+	// reads as a broken tool rather than two packages that disagree.
+	let warned = false;
+	const tryActivate = () => {
+		activateAsync();
+		if (warned) return;
+		const reason = process.env.PI_DELEGATE_HOST_MISMATCH;
+		if (!reason) return;
+		warned = true;
+		delete process.env.PI_DELEGATE_HOST_MISMATCH;
+		console.warn(`[pi-delegate] ${reason} - async delegation is off; align the two package versions.`);
+	};
+
 	// Two chances to notice the host, because the two packages can load in either order:
 	//   - `session_start`: every factory has returned, so a host that loaded first has
 	//     already published its service.
 	//   - the host announcing itself: covers a host that loads after this extension.
-	const tryActivate = () => {
-		activateAsync();
-	};
-
 	pi.on("session_start", tryActivate);
 	pi.events.on("async-jobs:host-ready", tryActivate);
 

@@ -17,7 +17,7 @@ import * as path from "node:path";
 import { Text } from "@earendil-works/pi-tui";
 import { Type } from "typebox";
 import { buildDelegateCommand, listFreeModels, openCodeChannel } from "./channel.ts";
-import { connectToHost } from "./consumer.ts";
+import { connectToHost, HOST_API_VERSION } from "./consumer.ts";
 import { findOpencodeCli } from "./cli.ts";
 
 /**
@@ -272,7 +272,25 @@ export function registerDelegateTool(pi: any): () => boolean {
 	return () => {
 		const current = getService();
 		if (!current) return false;
+
+		// Refuse rather than proceed on a shape we do not know. Checking this only to log it
+		// would leave the failure to the first call that happens to hit a changed method -
+		// a runtime throw from inside a tool, which reads as "the tool is broken" instead
+		// of "these two packages disagree about the interface".
+		if (host.status() === "incompatible") {
+			process.env.PI_DELEGATE_HOST_MISMATCH = `host apiVersion ${String(current.apiVersion)} != expected ${String(HOST_API_VERSION)}`;
+			return false;
+		}
+
 		current.registerChannel(openCodeChannel);
+
+		// Only activate a tool that is actually registered. `setActiveTools` takes names,
+		// and a name with nothing behind it is not an error it reports - it is silently
+		// dropped, which would leave this half looking enabled while the model cannot see
+		// it. The host guards the same way (`if (!known.has(name)) continue`) for the same
+		// reason.
+		if (!pi.getAllTools().some((tool) => tool.name === "delegate_async")) return false;
+
 		const active = new Set(pi.getActiveTools());
 		active.add("delegate_async");
 		pi.setActiveTools([...active]);
