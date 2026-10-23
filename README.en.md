@@ -24,14 +24,18 @@ Pair it with [`pi-async-jobs`](https://github.com/dong615119371/pi-async-jobs) a
 
 ## Two tools
 
-One package, two tools, depending on what else is installed.
+Same capability, two shapes. **Only one is visible at a time**, so there is nothing to choose.
 
-| Tool | Needs async-jobs? | Behaviour |
+| Tool | Present when | Behaviour |
 | --- | --- | --- |
-| `opencode` | No | **Synchronous.** Blocks until done, result in the same turn |
-| `delegate_async` | **Yes** | **Asynchronous.** Returns a job id at once, result arrives later as a message |
+| `opencode` | async mode **off** | **Synchronous.** Blocks until done, result in the same turn |
+| `delegate_async` | async mode **on** | **Asynchronous.** Returns a job id at once, result arrives later as a message |
 
-Installed alone it is a working synchronous delegation tool; the asynchronous half never appears.
+While async mode is on, the blocking tool is withdrawn from the model's tool list. Leaving both listed invites the model to pick the blocking one and stall the turn the async half exists to keep moving. The switch is `/async on` / `/async off`, provided by pi-async-jobs.
+
+The mode signal is **the job tools** (`job_status` and friends), not `delegate_async`. The latter can stay dormant because of a host version mismatch even though async mode is on.
+
+Installed alone, with no host, the synchronous tool is the only one that ever appears.
 
 ## The ecosystem
 

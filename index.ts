@@ -230,6 +230,58 @@ const OpencodeParams = Type.Object({
 
 
 export default function (pi: ExtensionAPI) {
+	// Two tools for one capability is a choice the model should never have to make.
+	//
+	// Async mode means the host is up. When it is, `delegate_async` is live and the
+	// blocking `opencode` has nothing to offer: anything it can do, the async tool does
+	// without holding the turn. Leaving both listed invites the model to pick the
+	// blocking one and stall the conversation the whole feature exists to keep moving.
+	//
+	// So the synchronous tool is withdrawn from the active set while `delegate_async` is
+	// active, and put back the moment it is not. Detecting the mode means asking the
+	// framework which tools are actually declared to the model (`getActiveTools`), not
+	// inferring it from a flag of our own - the async half is activated by the host
+	// arriving, which can happen after this factory returns.
+	const SYNC_TOOL = "opencode";
+
+	// The mode signal is a job tool, not `delegate_async`.
+	//
+	// `delegate_async` can be absent for a reason that has nothing to do with the mode:
+	// a host whose API version does not match leaves it dormant while async mode is on.
+	// The job tools are registered by `/async on` itself and withdrawn by `/async off`,
+	// so they answer the question this code actually needs answered - "is async mode on"
+	// - where checking our own tool would only answer "did our tool activate".
+	//
+	// Any one of them is enough; they appear and disappear together.
+	const JOB_TOOLS = ["job_status", "job_logs", "job_kill", "job_history"];
+
+	/**
+	 * Withdraw `opencode` in async mode, restore it when the mode is off.
+	 *
+	 * `setActiveTools` takes the whole set, so this is a read-modify-write. It runs on
+	 * every transition the extension can observe, and is idempotent: calling it when the
+	 * set already matches changes nothing.
+	 */
+	const syncToolVisibility = () => {
+		try {
+			const active = pi.getActiveTools();
+			const asyncMode = active.some((name) => JOB_TOOLS.includes(name));
+			const hasSync = active.includes(SYNC_TOOL);
+
+			// Async off and sync present, or async on and sync absent: already correct.
+			if (asyncMode === !hasSync) return;
+
+			if (asyncMode) {
+				pi.setActiveTools(active.filter((name) => name !== SYNC_TOOL));
+			} else {
+				pi.setActiveTools([...active, SYNC_TOOL]);
+			}
+		} catch {
+			// A harness too old for the active-tool accessors keeps both tools listed.
+			// That is the pre-existing behaviour, not a new failure - staying quiet is right.
+		}
+	};
+
 	// Delegation is one level deep. Without a guard a delegate could delegate again, and
 	// again, and the task would migrate outward forever and never come back.
 	//
@@ -240,7 +292,8 @@ export default function (pi: ExtensionAPI) {
 	// The synchronous tool is the opposite case. `opencode` blocks and returns inside the
 	// same turn, so a headless caller that waits for a result is exactly what it serves -
 	// refusing it there would remove the only shape that makes sense without a user
-	// watching. So it is registered unconditionally.
+	// watching. So it is registered unconditionally; visibility, not registration, is what
+	// `syncToolVisibility` controls.
 
 	pi.registerTool({
 		name: "opencode",
@@ -550,7 +603,14 @@ export default function (pi: ExtensionAPI) {
 	// reads as a broken tool rather than two packages that disagree.
 	let warned = false;
 	const tryActivate = () => {
-		activateAsync();
+		const wasActive = activateAsync();
+		// `activateAsync` reports whether it changed anything. Any transition - including
+		// the host arriving before this extension loaded - has to be reflected in which
+		// delegation tools the model can see, so sync on every call and let the helper
+		// decide whether there is work to do.
+		void wasActive;
+		syncToolVisibility();
+
 		if (warned) return;
 		const reason = process.env.PI_DELEGATE_HOST_MISMATCH;
 		if (!reason) return;
@@ -565,6 +625,14 @@ export default function (pi: ExtensionAPI) {
 	//   - the host announcing itself: covers a host that loads after this extension.
 	pi.on("session_start", tryActivate);
 	pi.events.on("async-jobs:host-ready", tryActivate);
+
+	// `/async on` and `/async off` add and remove the job tools mid-session, and nothing
+	// announces that change: the async extension calls `setActiveTools` directly and the
+	// framework fires no event for it. So the set is re-checked at the cheap boundaries
+	// where it can matter - once per turn, before any tool the model could pick from it.
+	pi.on("session_start", syncToolVisibility);
+	pi.on("turn_start", syncToolVisibility);
+	pi.events.on("async-jobs:host-ready", syncToolVisibility);
 
 	// Reset the cached free-model list on reload so an OpenCode upgrade is picked up
 	// without restarting Pi.
