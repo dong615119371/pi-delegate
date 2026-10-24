@@ -20,7 +20,7 @@ import type { ExtensionAPI } from "@earendil-works/pi-coding-agent";
 import { Text } from "@earendil-works/pi-tui";
 import { Type } from "typebox";
 import { findOpencodeCli, runOpencode, type OpenCodeRunResult } from "./cli.ts";
-import { getFreeModels, resetFreeModels } from "./models.ts";
+import { getModels, resetModels } from "./models.ts";
 import { registerDelegateTool } from "./delegate.ts";
 
 const DEFAULT_MODEL = "opencode/deepseek-v4.1-flash-free";
@@ -63,7 +63,7 @@ const VERIFICATION_COVENANT = [
 interface DelegateDetails {
 	mode: "single" | "parallel" | "chain";
 	models: string[];
-	freeModels: string[];
+	knownModels: string[];
 	results: OpenCodeRunResult[];
 }
 
@@ -180,23 +180,23 @@ async function mapWithConcurrency<TIn, TOut>(
 	return results;
 }
 
-/** Free-model list, resolved once per process via the shared cache in models.ts. */
-function getFreeModelsFor(_cli: string): Promise<string[]> {
-	return getFreeModels();
+/** Model list, resolved once per process via the shared cache in models.ts. */
+function getModelsFor(_cli: string): Promise<string[]> {
+	return getModels();
 }
 
 const TaskItem = Type.Object({
 	task: Type.String({ description: "Task to delegate to the OpenCode delegate" }),
 	cwd: Type.Optional(Type.String({ description: "Working directory for this task" })),
 	model: Type.Optional(
-		Type.String({ description: "Free model id for this task, e.g. 'opencode/nemotron-3-ultra-free'" }),
+		Type.String({ description: "Model id for this task, e.g. 'opencode/nemotron-3-ultra-free'" }),
 	),
 });
 
 const ChainItem = Type.Object({
 	task: Type.String({ description: "Task with an optional {previous} placeholder for the prior output" }),
 	cwd: Type.Optional(Type.String({ description: "Working directory for this step" })),
-	model: Type.Optional(Type.String({ description: "Free model id for this step" })),
+	model: Type.Optional(Type.String({ description: "Model id for this step" })),
 });
 
 const OpencodeParams = Type.Object({
@@ -205,7 +205,7 @@ const OpencodeParams = Type.Object({
 	chain: Type.Optional(Type.Array(ChainItem, { description: "Steps to run in sequence, {previous} carries output forward" })),
 	model: Type.Optional(
 		Type.String({
-			description: `Free model id. Default "${DEFAULT_MODEL}". Only ids carrying a 'free' label are accepted.`,
+			description: `Model id. Default "${DEFAULT_MODEL}" (a free one). Any id the CLI reports is accepted.`,
 		}),
 	),
 	agent: Type.Optional(
@@ -299,11 +299,11 @@ export default function (pi: ExtensionAPI) {
 		name: "opencode",
 		label: "OpenCode",
 		description: [
-			"Delegate execution to the OpenCode CLI running a free-tier model.",
+			"Delegate execution to the OpenCode CLI running a model of your choice.",
 			"Use this to hand off legwork - bulk edits, mechanical refactors, repetitive file changes, long grunt work -",
 			"not to make decisions. Keep the thinking here and outsource the doing.",
 			"Modes: single (task), parallel (tasks array), chain (steps with {previous}).",
-			`Only free models are allowed (default "${DEFAULT_MODEL}"); the accepted list is read from the CLI.`,
+			`Any model id the CLI reports works; the default is "${DEFAULT_MODEL}".`,
 			`Default agent is "${DEFAULT_AGENT}", which can write files and run shell commands. Pass agent:"plan" for read-only work.`,
 			"IMPORTANT: OpenCode ignores the process working directory and runs in the user's home directory,",
 			"so every path inside a task must be absolute. Relative paths will silently point at the wrong place.",
@@ -338,21 +338,23 @@ export default function (pi: ExtensionAPI) {
 				};
 			}
 
-			const freeModels = await getFreeModelsFor(cli);
+			const knownModels = await getModelsFor(cli);
 
-			// Enforce the free-only policy before spawning anything.
+			// Only check that the id exists. A paid model is a legitimate choice; the default
+			// is free because that is a sensible starting point, not because anything forbids
+			// spending. An empty list means the CLI could not be asked - skip the check
+			// rather than refuse every call over a transient failure.
 			const requested = [params.model, ...(params.tasks ?? []).map((t) => t.model), ...(params.chain ?? []).map((s) => s.model)]
 				.filter((m): m is string => typeof m === "string" && m.length > 0);
-			const rejected = requested.filter((m) => !freeModels.includes(m.split("#")[0] ?? m));
+			const rejected =
+				knownModels.length === 0 ? [] : requested.filter((m) => !knownModels.includes(m.split("#")[0] ?? m));
 			if (rejected.length > 0) {
-				const list = freeModels.length > 0 ? freeModels.join("\n  ") : "(could not read the model list)";
+				const list = knownModels.join("\n  ");
 				return {
 					content: [
 						{
 							type: "text",
-							text:
-								`Refused: not a free model: ${rejected.join(", ")}.\n` +
-								`Only free-tier models may be used. Available free models:\n  ${list}`,
+							text: `Unknown model: ${rejected.join(", ")}.\nModels reported by the CLI:\n  ${list}`,
 						},
 					],
 					details: undefined,
@@ -372,7 +374,7 @@ export default function (pi: ExtensionAPI) {
 			const makeDetails = (results: OpenCodeRunResult[]): DelegateDetails => ({
 				mode,
 				models: [model],
-				freeModels,
+				knownModels,
 				results,
 			});
 
@@ -398,7 +400,7 @@ export default function (pi: ExtensionAPI) {
 					content: [
 						{
 							type: "text",
-							text: `Provide exactly one mode: task, tasks, or chain.\nFree models: ${freeModels.join(", ") || "none"}`,
+							text: `Provide exactly one mode: task, tasks, or chain.`,
 						},
 					],
 					details: makeDetails([]),
@@ -637,6 +639,6 @@ export default function (pi: ExtensionAPI) {
 	// Reset the cached free-model list on reload so an OpenCode upgrade is picked up
 	// without restarting Pi.
 	pi.on("session_start", () => {
-		resetFreeModels();
+		resetModels();
 	});
 }

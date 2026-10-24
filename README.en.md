@@ -3,9 +3,9 @@
 > English · [中文](README.md)
 
 <p>
-  <img alt="version" src="https://img.shields.io/badge/version-0.1.0-orange">
+  <img alt="version" src="https://img.shields.io/badge/version-0.1.2-orange">
   <img alt="license" src="https://img.shields.io/badge/license-MIT-lightgrey">
-  <img alt="models" src="https://img.shields.io/badge/models-free--tier%20only-brightgreen">
+  <img alt="models" src="https://img.shields.io/badge/models-any%20the%20CLI%20reports-brightgreen">
 </p>
 
 Outsource work to the [OpenCode](https://opencode.ai) CLI.
@@ -53,11 +53,11 @@ The two packages have **separate repositories, separate versions, separate relea
 
 ```bash
 # synchronous only
-pi install git:github.com/dong615119371/pi-delegate@v0.1.0
+pi install git:github.com/dong615119371/pi-delegate@v0.1.2
 
 # synchronous + asynchronous
 pi install git:github.com/dong615119371/pi-async-jobs@v0.2.0
-pi install git:github.com/dong615119371/pi-delegate@v0.1.0
+pi install git:github.com/dong615119371/pi-delegate@v0.1.2
 ```
 
 > The host must be **v0.2.0 or later** — `host.ts` (the host service) first appears in 0.2.0. On 0.1.x, `delegate_async` will not activate.
@@ -85,20 +85,6 @@ When no host is present `activate()` returns false and `delegate_async` stays re
 
 **Every path must be absolute** — OpenCode ignores the working directory and always runs in the user's home. A relative path silently points at the wrong place.
 
-**Do not go through a proxy.** OpenCode rate-limits free models by IP:
-
-```
-OpenCode's free models aren't available from your current network
-because we've detected abusive traffic from this IP address.
-This isn't related to your account.
-```
-
-Note **this IP address**, not your usage. Proxy nodes are shared, so everyone else's traffic on the same egress IP counts against it. Switching to a direct connection restores it immediately.
-
-Symptom: the job ends `state: killed`, `exitCode: 1`, with `provider.auth` in the output.
-
-**Free models only.** The list is read from the CLI at runtime; a paid id is rejected before anything spawns.
-
 ## Files
 
 | File | Purpose |
@@ -108,8 +94,8 @@ Symptom: the job ends `state: killed`, `exitCode: 1`, with `provider.auth` in th
 | `channel.ts` | Renderer for the async channel: JSONL event stream → readable text |
 | `consumer.ts` | Template for connecting to the async-jobs host |
 | `cli.ts` | opencode-cli wrapper |
-| `models.ts` | Cached free-model list |
-| `skills/delegate-work/` | Usage manual: when to outsource, model choice, multi-round review |
+| `models.ts` | Cached model list |
+| `skills/delegate-work/` | Usage manual: when to outsource, how to write a task, how to verify results |
 
 ## License
 

@@ -3,9 +3,9 @@
 > 中文说明 · [English](README.en.md)
 
 <p>
-  <img alt="version" src="https://img.shields.io/badge/version-0.1.0-orange">
+  <img alt="version" src="https://img.shields.io/badge/version-0.1.2-orange">
   <img alt="license" src="https://img.shields.io/badge/license-MIT-lightgrey">
-  <img alt="models" src="https://img.shields.io/badge/models-free--tier%20only-brightgreen">
+  <img alt="models" src="https://img.shields.io/badge/models-any%20the%20CLI%20reports-brightgreen">
 </p>
 
 把活外包给 [OpenCode](https://opencode.ai) CLI。
@@ -53,11 +53,11 @@
 
 ```bash
 # 只同步
-pi install git:github.com/dong615119371/pi-delegate@v0.1.0
+pi install git:github.com/dong615119371/pi-delegate@v0.1.2
 
 # 同步 + 异步
 pi install git:github.com/dong615119371/pi-async-jobs@v0.2.0
-pi install git:github.com/dong615119371/pi-delegate@v0.1.0
+pi install git:github.com/dong615119371/pi-delegate@v0.1.2
 ```
 
 > 宿主必须是 **v0.2.0 或更高**——`host.ts`（宿主服务）是 0.2.0 才有的。装 0.1.x 的话 `delegate_async` 不会激活。
@@ -85,20 +85,6 @@ pi install git:github.com/dong615119371/pi-delegate@v0.1.0
 
 **所有路径必须写绝对路径**——OpenCode 忽略工作目录，永远在用户家目录跑。相对路径会静默指错地方。
 
-**不要走代理。** OpenCode 对免费模型按 IP 风控，报错原文：
-
-```
-OpenCode's free models aren't available from your current network
-because we've detected abusive traffic from this IP address.
-This isn't related to your account.
-```
-
-注意是 **this IP address**，不是你的用量。代理节点共享，同一个出口 IP 上别人的流量也算在它头上。切直连立马恢复。
-
-表现：作业 `state: killed`、`exitCode: 1`、输出里有 `provider.auth`。
-
-**只用免费模型。** 名单实时从 CLI 读，收费 id 在 spawn 之前就被拒。
-
 ## 文件
 
 | 文件 | 作用 |
@@ -108,8 +94,8 @@ This isn't related to your account.
 | `channel.ts` | 异步渲染器：JSONL 事件流 → 人读文本 |
 | `consumer.ts` | 接 async-jobs 宿主的模板 |
 | `cli.ts` | opencode-cli 封装 |
-| `models.ts` | 免费模型列表缓存 |
-| `skills/delegate-work/` | 用法手册：该不该外包、选模型、多轮审查 |
+| `models.ts` | 模型列表缓存 |
+| `skills/delegate-work/` | 用法手册：该不该外包、怎么写 task、怎么验证结果 |
 
 ## License
 

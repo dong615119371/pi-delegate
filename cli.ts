@@ -279,11 +279,6 @@ export async function deleteSessions(cli: string, cwd: string, ids: string[]): P
 	return { deleted, failed };
 }
 
-/** Ids carrying a `free` label. The whole delegation story rests on these costing nothing. */
-export function filterFreeModels(models: string[]): string[] {
-	return models.filter((m) => /free/i.test(m));
-}
-
 export interface RunOptions {
 	cli: string;
 	agent: string;

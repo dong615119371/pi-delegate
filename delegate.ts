@@ -16,7 +16,7 @@ import * as fs from "node:fs";
 import * as path from "node:path";
 import { Text } from "@earendil-works/pi-tui";
 import { Type } from "typebox";
-import { buildDelegateCommand, listFreeModels, openCodeChannel } from "./channel.ts";
+import { buildDelegateCommand, listKnownModels, openCodeChannel } from "./channel.ts";
 import { connectToHost, HOST_API_VERSION } from "./consumer.ts";
 import { findOpencodeCli } from "./cli.ts";
 
@@ -100,10 +100,10 @@ export function registerDelegateTool(pi: any): () => boolean {
 		name: "delegate_async",
 		label: "Delegate (background)",
 		description: [
-			"Hand work to OpenCode's free-tier models and return immediately.",
+			"Hand work to OpenCode's models and return immediately.",
 			"Use it for legwork - bulk edits, mechanical refactors, repetitive changes, long grunt work - not for decisions.",
 			"Keep the thinking here and outsource the doing: the delegate has its own context and cannot see this conversation.",
-			"Only free models are accepted (default \"opencode/deepseek-v4.1-flash-free\"); the list is read from the CLI at runtime.",
+			"Any model id the CLI reports is accepted (the default, \"opencode/deepseek-v4.1-flash-free\", happens to be free).",
 			"IMPORTANT: OpenCode ignores the working directory and runs in your home directory, so every path in a task must be absolute.",
 			"Results arrive as messages; do not poll for them.",
 			"Use this only when you have other work to do meanwhile.",
@@ -114,12 +114,12 @@ export function registerDelegateTool(pi: any): () => boolean {
 			tasks: Type.Array(
 				Type.Object({
 					task: Type.String({ description: "Self-contained task with absolute paths" }),
-					model: Type.Optional(Type.String({ description: "Free model id for this task" })),
+					model: Type.Optional(Type.String({ description: "Model id for this task" })),
 					agent: Type.Optional(Type.String({ description: `OpenCode agent: ${AGENTS.join(" | ")}` })),
 				}),
 				{ description: "Tasks to start in the background" },
 			),
-			model: Type.Optional(Type.String({ description: `Default free model. Default "${DEFAULT_MODEL}"` })),
+			model: Type.Optional(Type.String({ description: `Default model. Default "${DEFAULT_MODEL}" (a free one)` })),
 			agent: Type.Optional(Type.String({ description: `Default agent. Default "${DEFAULT_AGENT}"` })),
 			timeoutSeconds: Type.Optional(Type.Number({ description: `Per-task timeout. Default ${DELEGATE_TIMEOUT_SECONDS}.` })),
 			files: Type.Optional(
@@ -159,7 +159,7 @@ export function registerDelegateTool(pi: any): () => boolean {
 				};
 			}
 
-			const freeModels = listFreeModels(cli);
+			const knownModels = listKnownModels(cli);
 			const defaultModel = params.model ?? DEFAULT_MODEL;
 			const defaultAgent = params.agent ?? DEFAULT_AGENT;
 
@@ -167,17 +167,26 @@ export function registerDelegateTool(pi: any): () => boolean {
 				(m): m is string => typeof m === "string" && m.length > 0,
 			);
 			// A model id may carry a `#variant` suffix (e.g. ...free#high) that selects the
-			// reasoning effort. The free-model list contains bare ids only, so compare on the
-			// part before the hash - otherwise every variant request is refused as "not free".
-			const rejected = requested.filter((m) => !freeModels.includes(m.split("#")[0] ?? m));
+			// reasoning effort. The reported list contains bare ids only, so compare on the
+			// part before the hash - otherwise every variant request looks unknown.
+			//
+			// The check is "does this id exist", not "is it free": a paid model is a
+			// legitimate choice, and the default is free only because that is a sensible
+			// starting point. A misspelled id still fails here rather than inside the CLI.
+			// An empty list means the CLI could not be asked; skip the check rather than
+			// refuse everything over a transient failure.
+			const rejected =
+				knownModels.length === 0
+					? []
+					: requested.filter((m) => !knownModels.includes(m.split("#")[0] ?? m));
 			if (rejected.length > 0) {
 				return {
 					content: [
 						{
 							type: "text",
 							text:
-								`Refused: not a free model: ${rejected.join(", ")}.\n` +
-								`Available free models:\n  ${freeModels.join("\n  ") || "(none found - is the OpenCode client logged in?)"}`,
+								`Unknown model: ${rejected.join(", ")}.\n` +
+								`Models reported by the CLI:\n  ${knownModels.join("\n  ")}`,
 						},
 					],
 					details: undefined,

@@ -22,7 +22,6 @@
 import { execFileSync } from "node:child_process";
 import { readFileSync } from "node:fs";
 
-/** Free-tier models only: the whole point of delegating here is that it costs nothing. */
 export function encodeTask(task: string): string {
 	return Buffer.from(task, "utf8").toString("base64");
 }
@@ -418,20 +417,19 @@ function formatCoverage(decoded: DecodedDelegate): string {
 	return `\n\n[examined: ${files.length} file(s), ${lines} lines total | ${toolLine}]\n${top}${more}`;
 }
 
-/** Enumerate the CLI's free-tier models. Falls back to an empty list on failure. */
-export function listFreeModels(cli: string, timeoutMs = 30000): string[] {
-	try {
-		const out = execFileSync(cli, ["models"], { encoding: "utf8", timeout: timeoutMs, windowsHide: true });
-		return out
-			.split(/\r?\n/)
-			.map((line) => line.trim())
-			.filter((line) => line.length > 0 && /free/i.test(line));
-	} catch {
-		return [];
-	}
+/**
+ * Enumerate every model id the CLI reports, free and paid alike.
+ *
+ * This used to filter on the `free` label and the delegation tools refused anything
+ * else. The filter is gone: a paid model is a legitimate choice, and the check that
+ * still matters is "does this id exist", which `listAllModels` answers. Callers that
+ * specifically need the free subset can filter the result themselves.
+ */
+export function listKnownModels(cli: string, timeoutMs = 30000): string[] {
+	return listAllModels(cli, timeoutMs);
 }
 
-/** Read the CLI's model list without the free filter, for diagnostics. */
+/** Read the CLI's model list, unfiltered. */
 export function listAllModels(cli: string, timeoutMs = 30000): string[] {
 	try {
 		const out = execFileSync(cli, ["models"], { encoding: "utf8", timeout: timeoutMs, windowsHide: true });
