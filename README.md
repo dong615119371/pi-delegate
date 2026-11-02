@@ -3,7 +3,7 @@
 > 中文说明 · [English](README.en.md)
 
 <p>
-  <img alt="version" src="https://img.shields.io/badge/version-0.1.2-orange">
+  <img alt="version" src="https://img.shields.io/badge/version-0.1.4-orange">
   <img alt="license" src="https://img.shields.io/badge/license-MIT-lightgrey">
   <img alt="models" src="https://img.shields.io/badge/models-any%20the%20CLI%20reports-brightgreen">
 </p>
@@ -53,11 +53,11 @@
 
 ```bash
 # 只同步
-pi install git:github.com/dong615119371/pi-delegate@v0.1.2
+pi install git:github.com/dong615119371/pi-delegate@v0.1.4
 
 # 同步 + 异步
 pi install git:github.com/dong615119371/pi-async-jobs@v0.2.0
-pi install git:github.com/dong615119371/pi-delegate@v0.1.2
+pi install git:github.com/dong615119371/pi-delegate@v0.1.4
 ```
 
 > 宿主必须是 **v0.2.0 或更高**——`host.ts`（宿主服务）是 0.2.0 才有的。装 0.1.x 的话 `delegate_async` 不会激活。

@@ -53,11 +53,11 @@ The two packages have **separate repositories, separate versions, separate relea
 
 ```bash
 # synchronous only
-pi install git:github.com/dong615119371/pi-delegate@v0.1.2
+pi install git:github.com/dong615119371/pi-delegate@v0.1.4
 
 # synchronous + asynchronous
 pi install git:github.com/dong615119371/pi-async-jobs@v0.2.0
-pi install git:github.com/dong615119371/pi-delegate@v0.1.2
+pi install git:github.com/dong615119371/pi-delegate@v0.1.4
 ```
 
 > The host must be **v0.2.0 or later** — `host.ts` (the host service) first appears in 0.2.0. On 0.1.x, `delegate_async` will not activate.
