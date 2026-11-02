@@ -301,6 +301,40 @@ export const openCodeChannel = {
 	},
 };
 
+const TAIL_START_BYTES = 4 * 1024 * 1024;
+const TAIL_MAX_BYTES = 16 * 1024 * 1024;
+
+/**
+ * Read a finished delegate's stream from the output file, widening the window
+ * when the final text is not in the first slice.
+ *
+ * The start is wider than pi-crew's: this same slice also feeds the tool-call,
+ * cost and coverage numbers, so starting at 96 KiB would silently undercount
+ * them for medium-sized streams. Normal jobs still read exactly once; only a
+ * job whose last text event is more than 4 MiB from EOF grows to 16 MiB.
+ */
+function readDelegateTail(
+	record: any,
+	ctx: { tailOutput: (id: string, maxBytes: number) => { text: string; totalBytes: number } },
+): { raw: string; decoded: DecodedDelegate } {
+	// A failed or killed job reports record.error; widening could surface
+	// partial narration instead, so those keep the original single window.
+	const maxBytes = record.state === "done" && !record.error ? TAIL_MAX_BYTES : TAIL_START_BYTES;
+	let want = TAIL_START_BYTES;
+	for (;;) {
+		const fromFile = ctx.tailOutput(record.id, want);
+		if (fromFile.totalBytes === 0) {
+			// No file (yet): fall back to the engine's in-memory tail.
+			const raw = record.output ?? "";
+			return { raw, decoded: decodeDelegateStream(raw) };
+		}
+		const raw = fromFile.text;
+		const decoded = decodeDelegateStream(raw);
+		if (decoded.text || want >= fromFile.totalBytes || want >= maxBytes) return { raw, decoded };
+		want = Math.min(want * 4, maxBytes);
+	}
+}
+
 export function renderDelegateResult(
 	record: any,
 	ctx: { tailOutput: (id: string, maxBytes: number) => { text: string; totalBytes: number } },
@@ -317,15 +351,7 @@ export function renderDelegateResult(
 	//
 	// The file is the source of truth (same rationale as engine.logs). The tail is only a
 	// fallback for the window before the file is readable.
-	let raw = "";
-	const fromFile = ctx.tailOutput(record.id, 4 * 1024 * 1024);
-	if (fromFile.totalBytes > 0) {
-		raw = fromFile.text;
-	}
-	if (!raw) {
-		raw = record.output ?? "";
-	}
-	const decoded = decodeDelegateStream(raw);
+	const { raw, decoded } = readDelegateTail(record, ctx);
 	// Channel-specific facts live in `record.stats`, a bag the framework never reads into.
 	// They were named fields once, which meant the framework's own types knew that a
 	// channel called OpenCode exists.
