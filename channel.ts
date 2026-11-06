@@ -70,7 +70,7 @@ export function buildDelegateCommand(options: DelegateCommandOptions): string {
 	);
 }
 
-function buildArgv(options: DelegateCommandOptions): string[] {
+function buildArgv(options: DelegateCommandOptions): string {
 	const encoded = encodeTask(withVerificationCovenant(options.task));
 	const title = (options.title ?? "pi-async delegate").replace(/"/g, "");
 	const parts = [

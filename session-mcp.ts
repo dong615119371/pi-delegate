@@ -628,7 +628,7 @@ async function callTool(name: string, args: Record<string, any>): Promise<ToolRe
 				const askId = appendEnvelope(target, "ask", message, from);
 				const result = await waitForFeedAnswer(feedFileFor(target.id), askId, timeoutMs);
 				if (!result.ok) return fail(result.error ?? "No answer.");
-				return ok(result.text ?? "(the target answered with no text)");
+				return ok(result.text || "(the target answered with no text)");
 			}
 			const sentAt = Date.now();
 			const sent = await api("POST", `/api/session/${encodeURIComponent(target.id)}/prompt`, { text: message });
@@ -655,8 +655,11 @@ async function callTool(name: string, args: Record<string, any>): Promise<ToolRe
 				});
 				const answer = messages.find((m) => {
 					if (m?.type !== "assistant") return false;
-					const ts = Number(m?.time?.completed ?? m?.time?.created ?? 0);
-					return ts > sentAt;
+					const completedTs = Number(m?.time?.completed ?? 0);
+					if (completedTs > sentAt) return true;
+					// If completed timestamp is missing (streaming/in-flight), only accept once the session is settled to idle
+					if (isSettled && Number(m?.time?.created ?? 0) > sentAt) return true;
+					return false;
 				});
 				if (answer) {
 					const content = Array.isArray(answer?.content) ? answer.content : [];

@@ -16,6 +16,24 @@ import { spawn } from "node:child_process";
 import * as fs from "node:fs";
 import * as path from "node:path";
 
+function resolveTaskkillPath(env: NodeJS.ProcessEnv = process.env): string | null {
+	const lookup = (name: string): string | undefined => {
+		const direct = env[name];
+		if (direct !== undefined) return direct;
+		const lower = name.toLowerCase();
+		for (const key of Object.keys(env)) {
+			if (key.toLowerCase() === lower) return env[key];
+		}
+		return undefined;
+	};
+	const root = lookup("SystemRoot") ?? lookup("WINDIR");
+	if (!root) return null;
+	const trimmed = root.trim();
+	if (trimmed.length === 0 || trimmed.includes("\0")) return null;
+	if (!path.win32.isAbsolute(trimmed)) return null;
+	return path.win32.join(trimmed, "System32", "taskkill.exe");
+}
+
 export interface Usage {
 	input: number;
 	output: number;
@@ -356,22 +374,26 @@ export function runOpencode(opts: RunOptions): Promise<OpenCodeRunResult> {
 			const pid = proc.pid;
 			if (pid === undefined) return;
 			if (process.platform === "win32") {
+				const taskkill = resolveTaskkillPath() || "taskkill";
 				try {
-					spawn("taskkill", ["/pid", String(pid), "/T", "/F"], { stdio: "ignore", windowsHide: true });
+					spawn(taskkill, ["/pid", String(pid), "/T", "/F"], { stdio: "ignore", windowsHide: true });
+					return;
+				} catch {
+					/* fall through to plain proc.kill() on Windows */
+				}
+			} else {
+				try {
+					// A negative pid signals the process group on POSIX.
+					process.kill(-pid, signal);
 					return;
 				} catch {
 					/* fall through to a plain signal */
 				}
 			}
 			try {
-				// A negative pid signals the process group on POSIX.
-				process.kill(-pid, signal);
+				proc.kill(signal);
 			} catch {
-				try {
-					proc.kill(signal);
-				} catch {
-					/* already exited */
-				}
+				/* already exited */
 			}
 		};
 
