@@ -42,6 +42,7 @@ interface PiLiveEntry {
 	cwd: string;
 	pid: number;
 	pipe: string;
+	error?: string;
 }
 
 interface Target {
@@ -369,17 +370,36 @@ function sendPipe(pipePath: string, payload: unknown, timeoutMs = 10_000): Promi
 		socket.setEncoding("utf8");
 		socket.on("data", (chunk: string) => {
 			buffer += chunk;
-			if (buffer.includes("\n")) {
-				if (settled) return;
-				settled = true;
-				clearTimeout(timer);
+			let idx: number;
+			while ((idx = buffer.indexOf("\n")) >= 0) {
+				const line = buffer.slice(0, idx).trim();
+				buffer = buffer.slice(idx + 1);
+				if (!line) continue;
 				try {
-					const res = JSON.parse(buffer.trim());
+					const res = JSON.parse(line);
+					if (settled) return;
+					settled = true;
+					clearTimeout(timer);
 					resolve({ ok: res.ok !== false, data: res, error: res.error });
-				} catch (err) {
-					resolve({ ok: false, error: `Malformed response: ${String(err)}` });
+					socket.end();
+					return;
+				} catch {
+					// Incomplete JSON fragment across chunks, wait for next chunks
 				}
-				socket.end();
+			}
+		});
+
+		socket.on("end", () => {
+			if (settled) return;
+			const remaining = buffer.trim();
+			if (remaining) {
+				try {
+					const res = JSON.parse(remaining);
+					settled = true;
+					clearTimeout(timer);
+					resolve({ ok: res.ok !== false, data: res, error: res.error });
+					return;
+				} catch {}
 			}
 		});
 
@@ -480,7 +500,8 @@ async function callTool(name: string, args: Record<string, any>): Promise<ToolRe
 			const lines: string[] = [];
 			for (const e of piLiveSessions()) {
 				if (search && !(e.name ?? "").toLowerCase().includes(search)) continue;
-				lines.push(`[pi] ${e.id}  ${e.name}  cwd=${e.cwd ?? "?"}  (live pipe: ${e.pipe})`);
+				const statusText = e.error ? `(pipe error: ${e.error})` : `(live pipe: ${e.pipe})`;
+				lines.push(`[pi] ${e.id}  ${e.name}  cwd=${e.cwd ?? "?"}  ${statusText}`);
 			}
 			for (const s of await ocSessionList()) {
 				const title = String(s.title ?? s.id);
