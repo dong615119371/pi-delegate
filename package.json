@@ -1,6 +1,6 @@
 {
   "name": "pi-delegate",
-  "version": "0.1.4",
+  "version": "0.1.5",
   "description": "Outsource work to the OpenCode CLI. Synchronous by default; gains a background delegate when the async-jobs host is installed.",
   "keywords": [
     "pi-package",
@@ -25,6 +25,7 @@
     "channel.ts",
     "consumer.ts",
     "cli.ts",
+    "session-mcp.ts",
     "models.ts",
     "skills/**/*.md",
     "README.md",
