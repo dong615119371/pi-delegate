@@ -3,26 +3,57 @@
 > 中文说明 · [English](README.en.md)
 
 <p>
-  <img alt="version" src="https://img.shields.io/badge/version-0.1.4-orange">
+  <img alt="version" src="https://img.shields.io/badge/version-0.1.5-orange">
   <img alt="license" src="https://img.shields.io/badge/license-MIT-lightgrey">
   <img alt="models" src="https://img.shields.io/badge/models-any%20the%20CLI%20reports-brightgreen">
 </p>
 
-把活外包给 [OpenCode](https://opencode.ai) CLI。
+把活外包给 [OpenCode](https://opencode.ai) CLI，并彻底打通 Pi 与 OpenCode 之间多会话 Agent 实时互联（Session Relay）。
 
 ## 为什么做这个
 
-由于 OpenCode 官方收紧了对 Zen 免费模型的外部调用，所以导致我们广大开发者陷入了没有免费模型可以白嫖的境地。于是我们带来了 **pi-delegate**：
+由于 OpenCode 官方收紧了对 Zen 免费模型的外部调用，导致广大开发者陷入了没有免费模型可以调用的困境。我们带来了 **pi-delegate**：通过官方 CLI 合规调度任务，配合 [`pi-async-jobs`](https://github.com/dong615119371/pi-async-jobs) 打造极致的异步外包体验。
 
-这是一款**完全合规**的替代方案。它不直接将 OpenCode 免费模型接出，而是使用其他 Agent——这里使用 Pi Agent——通过**官方 CLI** 来实现任务的分配调度！
+而在长周期、大规模工程项目中，我们经常需要同时开两个甚至多个会话：**一个负责写业务代码，另一个负责深度安全与架构审计**。过去开发者只能在会话之间充当“人肉搬运工”，手动复制粘贴两端的上下文和反馈。
 
-配合我们的异步工具调动插件 [`pi-async-jobs`](https://github.com/dong615119371/pi-async-jobs)，可以实现非常夸张的效率提升！
+**在 v0.1.5 中，我们推出了跨会话中继（Session Relay）——彻底终结人肉搬运工历史！**
 
-> **合规在哪里**：Zen 免费模型已经不提供 API key，也不能被反向代理、伪造请求头带出 OpenCode 官方客户端。想用，就只能在 OpenCode 自己的客户端和 CLI 里用。
->
-> 所以这里不做这些事。Pi 调用的就是 OpenCode 自己的命令行程序，走它正常的会话与认证。官方 CLI 能做的，这里就能做；官方 CLI 不能做的，这里也不做。
+---
 
-## 两个工具
+## 核心能力一：跨会话中继 (Session Relay MCP)
+
+通过本地零外部依赖的标准 MCP 服务（`session-mcp.ts`），赋予任意端（Pi 与 OpenCode）的大模型 5 把跨会话协同的神兵利器：
+
+| 工具 | 作用 | 典型场景 |
+| --- | --- | --- |
+| `list_sessions` | 秒级列出当前存活的所有 PI 与 OpenCode 会话 | 查找标题叫“代码审计”或“架构评审”的会话 ID |
+| `read_session` | 调阅目标会话最近 $N$ 条历史对话或最新输出 | 查看审计 Agent 刚才审到了哪一步、说了什么 |
+| `send_session` | 单向排队推送指令（Ctrl+Q `followUp` 语义，即发即走） | 通知审计会话：“我开始重构 auth 模块了，做好准备” |
+| **`ask_session`**<br>*(核心杀招)* | **向目标会话提问 ➔ 等待对方思考执行完毕 ➔ 直接拿回最终结论** | 代码会话写完后直接调用，让审计会话审核，审核结论自动返回，全程全自动闭环抛接球！ |
+| **`spawn_session`**<br>*(持久会话)* | **一键拉起一个新的独立持久化 PI 会话** | 原生独立进程脱离后台作业系统（无作业面板噪音，无超时强杀风险），自动挂载信箱桥随时接收指令 |
+
+### 配置方式 (MCP)
+
+在 `~/.pi/agent/mcp.json` 或 OpenCode 的 `opencode.jsonc` 中添加本地 MCP 服务即可：
+
+```json
+{
+  "mcpServers": {
+    "pi-relay": {
+      "command": "node",
+      "args": [
+        "D:\\path\\to\\pi-delegate\\session-mcp.ts"
+      ],
+      "timeout": 660,
+      "description": "Session-to-session messaging: list/read/send/ask/spawn live pi and OpenCode sessions."
+    }
+  }
+}
+```
+
+---
+
+## 核心能力二：外包给 OpenCode CLI (两个工具)
 
 同一个能力，两种形状。**同一时刻只会看到一个**，不需要选。
 
@@ -52,12 +83,12 @@
 ## 装
 
 ```bash
-# 只同步
-pi install git:github.com/dong615119371/pi-delegate@v0.1.4
+# 只同步外包 + 会话中继
+pi install git:github.com/dong615119371/pi-delegate@v0.1.5
 
-# 同步 + 异步
-pi install git:github.com/dong615119371/pi-async-jobs@v0.2.0
-pi install git:github.com/dong615119371/pi-delegate@v0.1.4
+# 同步 + 异步外包 + 会话中继（推荐完整体验）
+pi install git:github.com/dong615119371/pi-async-jobs@v0.2.2
+pi install git:github.com/dong615119371/pi-delegate@v0.1.5
 ```
 
 > 宿主必须是 **v0.2.0 或更高**——`host.ts`（宿主服务）是 0.2.0 才有的。装 0.1.x 的话 `delegate_async` 不会激活。
