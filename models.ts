@@ -19,12 +19,17 @@ export function resetModels(): void {
 }
 
 /** Every model id the CLI reports, or an empty list when it cannot be asked. */
-export function getModels(): Promise<string[]> {
-	if (!cache) {
-		const cli = findOpencodeCli();
-		cache = cli
-			? listModels(cli).catch(() => [])
-			: Promise.resolve([]);
+export async function getModels(): Promise<string[]> {
+	if (cache) return cache;
+	const cli = findOpencodeCli();
+	if (!cli) return [];
+	try {
+		const list = await listModels(cli);
+		if (list.length > 0) {
+			cache = Promise.resolve(list);
+		}
+		return list;
+	} catch {
+		return [];
 	}
-	return cache;
 }
