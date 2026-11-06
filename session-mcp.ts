@@ -314,9 +314,11 @@ async function ocMessageList(sessionID: string): Promise<Array<Record<string, an
 
 /** Last assistant text in an OpenCode message list. Message shape (newest first):
  *  {type: "assistant", content: [{type: "text"|"reasoning", text}]}, {type: "user", text}. */
-function ocLastAssistantText(messages: Array<Record<string, any>>): string {
+function ocLastAssistantText(messages: Array<Record<string, any>>, afterTs = 0): string {
 	for (const m of messages) {
 		if (m?.type !== "assistant") continue;
+		const ts = Number(m?.time?.completed ?? m?.time?.created ?? 0);
+		if (afterTs > 0 && ts <= afterTs) continue;
 		const content = Array.isArray(m?.content) ? m.content : [];
 		const texts = content
 			.filter((b: Record<string, any>) => b?.type === "text" && typeof b.text === "string")
@@ -440,7 +442,7 @@ function waitForFeedAnswer(feedFile: string, askId: string, timeoutMs: number): 
 		}, timeoutMs);
 		try {
 			watcher = fs.watch(feedDir, (_event, filename) => {
-				if (filename && filename !== feedName) return;
+				if (filename && filename.toLowerCase() !== feedName.toLowerCase()) return;
 				check();
 			});
 		} catch {
@@ -635,8 +637,9 @@ async function callTool(name: string, args: Record<string, any>): Promise<ToolRe
 			// Give wait a timeout linked directly to the requested timeoutMs (+5s grace).
 			const waited = await api("POST", `/api/experimental/session/${encodeURIComponent(target.id)}/wait`, undefined, timeoutMs + 5000);
 			if (waited.ok) {
-				const text = ocLastAssistantText(await ocMessageList(target.id));
-				return ok(text || "(the target answered with no text)");
+				const text = ocLastAssistantText(await ocMessageList(target.id), sentAt);
+				if (text) return ok(text);
+				// If no text was produced after sentAt, it was an early idle race condition — fall through to polling!
 			}
 			// Fallback: poll for a NEW assistant message (idle entries sit at the top of
 			// the newest-first list and must be skipped, or the poll never matches).
@@ -739,5 +742,7 @@ process.stdin.on("data", (chunk: string) => {
 		if (line) void handle(line);
 	}
 });
-// Let Node.js exit naturally when stdin closes and all pending requests complete.
-process.stdin.on("end", () => {});
+// Exit cleanly when stdin closes, allowing a 1s grace period for pending I/O before forcing exit.
+process.stdin.on("end", () => {
+	setTimeout(() => process.exit(0), 1000).unref();
+});
