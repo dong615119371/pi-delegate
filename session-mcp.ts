@@ -164,10 +164,11 @@ const SUPERVISOR_SRC = [
 	'  process.exit(1);',
 	'});',
 	'const out = fs.createWriteStream(logFile, { flags: "a" });',
-	'child.stdout.pipe(out); child.stderr.pipe(out);',
+	'child.stdout.pipe(out, { end: false });',
+	'child.stderr.pipe(out, { end: false });',
 	'setTimeout(() => { try { child.stdin.end(); } catch {} }, Number(process.env.PI_SUP_TTL || "28800") * 1000);',
-	'child.on("exit", (code) => {',
-	'  appendLog("CHILD EXITED: code=" + code);',
+	'child.on("close", (code) => {',
+	'  appendLog("CHILD CLOSED: code=" + code);',
 	'  try { out.end(); } catch {}',
 	'  process.exit(code ?? 0);',
 	'});',
@@ -445,6 +446,14 @@ function waitForFeedAnswer(feedFile: string, askId: string, timeoutMs: number): 
 				if (filename && filename.toLowerCase() !== feedName.toLowerCase()) return;
 				check();
 			});
+			watcher.on("error", () => {
+				try { watcher?.close(); } catch {}
+				watcher = null;
+				if (!fallbackTimer) {
+					fallbackTimer = setInterval(check, 5_000);
+					fallbackTimer.unref?.();
+				}
+			});
 		} catch {
 			// No usable watch handle: degrade to a coarse poll instead of never resolving.
 			fallbackTimer = setInterval(check, 5_000);
@@ -604,6 +613,9 @@ async function callTool(name: string, args: Record<string, any>): Promise<ToolRe
 			if ("error" in target) return fail(target.error);
 			const message = String(args.message ?? "").trim();
 			if (!message) return fail("message must not be empty.");
+			if (message.length > 24_000) {
+				return fail(`Message length (${message.length} chars) exceeds the safe cross-process buffer limit (24,000 chars). Write large content to a temporary file and pass its absolute path instead.`);
+			}
 			const from = String(args.from ?? "peer-agent");
 			if (target.kind === "pi") {
 				appendEnvelope(target, "msg", message, from);
@@ -621,6 +633,9 @@ async function callTool(name: string, args: Record<string, any>): Promise<ToolRe
 			if ("error" in target) return fail(target.error);
 			const message = String(args.message ?? "").trim();
 			if (!message) return fail("message must not be empty.");
+			if (message.length > 24_000) {
+				return fail(`Message length (${message.length} chars) exceeds the safe cross-process buffer limit (24,000 chars). Write large content to a temporary file and pass its absolute path instead.`);
+			}
 			const from = String(args.from ?? "peer-agent");
 			const timeoutMs = Math.max(10, Math.min(3600, Number(args.timeoutSeconds) || 600)) * 1000;
 

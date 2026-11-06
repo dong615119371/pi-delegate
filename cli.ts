@@ -482,14 +482,17 @@ export function runOpencode(opts: RunOptions): Promise<OpenCodeRunResult> {
 			}
 		};
 
-		proc.stdout?.on("data", (data) => {
-			buffer += data.toString();
+		const stdoutDecoder = new StringDecoder("utf8");
+		const stderrDecoder = new StringDecoder("utf8");
+
+		proc.stdout?.on("data", (data: Buffer | string) => {
+			buffer += typeof data === "string" ? data : stdoutDecoder.write(data);
 			const lines = buffer.split("\n");
 			buffer = lines.pop() ?? "";
 			for (const line of lines) processLine(line);
 		});
-		proc.stderr?.on("data", (data) => {
-			result.stderr += data.toString();
+		proc.stderr?.on("data", (data: Buffer | string) => {
+			result.stderr += typeof data === "string" ? data : stderrDecoder.write(data);
 		});
 
 		proc.on("error", (err) => {
@@ -501,6 +504,8 @@ export function runOpencode(opts: RunOptions): Promise<OpenCodeRunResult> {
 
 		proc.on("close", (code) => {
 			clearTimeout(timer);
+			buffer += stdoutDecoder.end();
+			result.stderr += stderrDecoder.end();
 			if (buffer.trim()) processLine(buffer);
 			result.exitCode = code ?? 0;
 			// The last text part is the final answer; earlier ones are narrating steps.
