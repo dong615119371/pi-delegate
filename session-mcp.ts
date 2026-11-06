@@ -641,12 +641,18 @@ async function callTool(name: string, args: Record<string, any>): Promise<ToolRe
 				if (text) return ok(text);
 				// If no text was produced after sentAt, it was an early idle race condition — fall through to polling!
 			}
-			// Fallback: poll for a NEW assistant message (idle entries sit at the top of
-			// the newest-first list and must be skipped, or the poll never matches).
+			// Fallback: poll for a NEW assistant message.
+			// Intermediate steps (tool calls like read/grep) emit assistant messages with no text
+			// blocks — these must NOT trigger an early exit while the agent is still working.
 			const deadline = Date.now() + timeoutMs;
 			while (Date.now() < deadline) {
 				await new Promise((r) => setTimeout(r, 2000));
 				const messages = await ocMessageList(target.id);
+				const isSettled = messages.some((m) => {
+					if (m?.type !== "idle") return false;
+					const ts = Number(m?.time?.completed ?? m?.time?.created ?? 0);
+					return ts > sentAt;
+				});
 				const answer = messages.find((m) => {
 					if (m?.type !== "assistant") return false;
 					const ts = Number(m?.time?.completed ?? m?.time?.created ?? 0);
@@ -657,7 +663,13 @@ async function callTool(name: string, args: Record<string, any>): Promise<ToolRe
 					const texts = content
 						.filter((b: Record<string, any>) => b?.type === "text" && typeof b.text === "string")
 						.map((b: Record<string, any>) => b.text as string);
-					return ok(texts.join("\n") || "(the target answered with no text)");
+					if (texts.length > 0) {
+						return ok(texts.join("\n"));
+					}
+					if (isSettled) {
+						return ok("(the target answered with no text)");
+					}
+					// Intermediate tool call: agent is still executing tools, keep polling!
 				}
 			}
 			return fail(`Timed out after ${Math.round(timeoutMs / 1000)}s waiting for the target to answer.`);
