@@ -243,45 +243,69 @@ interface ApiResult {
 	raw: string;
 }
 
-function api(method: string, apiPath: string, body?: unknown): ApiResult {
-	const cli = findOpencodeCli();
-	if (!cli) {
-		return { ok: false, status: 0, data: null, raw: "OpenCode CLI not found. Install the desktop client or set OPENCODE_CLI." };
-	}
-	const args = ["api", method, apiPath];
-	if (body !== undefined) args.push("--data", JSON.stringify(body));
-	const res = spawnSync(cli, args, {
-		encoding: "utf8",
-		timeout: 120_000,
-		windowsHide: true,
-		maxBuffer: 64 * 1024 * 1024,
+function api(method: string, apiPath: string, body?: unknown, timeoutMs = 120_000): Promise<ApiResult> {
+	return new Promise((resolve) => {
+		const cli = findOpencodeCli();
+		if (!cli) {
+			resolve({ ok: false, status: 0, data: null, raw: "OpenCode CLI not found. Install the desktop client or set OPENCODE_CLI." });
+			return;
+		}
+		const args = ["api", method, apiPath];
+		if (body !== undefined) args.push("--data", JSON.stringify(body));
+		let stdout = "";
+		let stderr = "";
+		let settled = false;
+		let child: ReturnType<typeof spawn>;
+		const timer = setTimeout(() => {
+			if (settled) return;
+			settled = true;
+			try { child?.kill("SIGKILL"); } catch {}
+			resolve({ ok: false, status: -1, data: null, raw: `Command timed out after ${Math.round(timeoutMs / 1000)}s` });
+		}, timeoutMs);
+
+		try {
+			child = spawn(cli, args, { stdio: ["ignore", "pipe", "pipe"], windowsHide: true });
+		} catch (err) {
+			clearTimeout(timer);
+			resolve({ ok: false, status: 0, data: null, raw: String(err) });
+			return;
+		}
+		child.stdout?.on("data", (d) => { stdout += d.toString(); });
+		child.stderr?.on("data", (d) => { stderr += d.toString(); });
+		child.on("error", (err) => {
+			if (settled) return;
+			settled = true;
+			clearTimeout(timer);
+			resolve({ ok: false, status: 0, data: null, raw: String(err) });
+		});
+		child.on("close", (status) => {
+			if (settled) return;
+			settled = true;
+			clearTimeout(timer);
+			const raw = stdout.trim();
+			let data: unknown = null;
+			try {
+				data = JSON.parse(raw);
+			} catch {
+				/* non-JSON output is passed through as raw */
+			}
+			const isErrorEnvelope = (data !== null && typeof data === "object" && "_tag" in (data as object)) || /HTTP [45]\d\d/.test(raw);
+			const ok = status === 0 && !isErrorEnvelope && (data !== null || raw === "");
+			resolve({ ok, status: status ?? -1, data, raw: raw || stderr.trim() });
+		});
 	});
-	if (res.error) return { ok: false, status: 0, data: null, raw: String(res.error) };
-	const raw = (res.stdout ?? "").trim();
-	let data: unknown = null;
-	try {
-		data = JSON.parse(raw);
-	} catch {
-		/* non-JSON output is passed through as raw */
-	}
-	// Success is exit 0 with either parsed JSON or an EMPTY body (e.g. the wait
-	// endpoint returns nothing). The CLI prints error envelopes with an _tag key
-	// and/or an "HTTP 4xx/5xx" line — those are failures even at exit 0.
-	const isErrorEnvelope = (data !== null && typeof data === "object" && "_tag" in (data as object)) || /HTTP [45]\d\d/.test(raw);
-	const ok = res.status === 0 && !isErrorEnvelope && (data !== null || raw === "");
-	return { ok, status: res.status ?? -1, data, raw: raw || (res.stderr ?? "").trim() };
 }
 
-function ocSessionList(): Array<Record<string, any>> {
-	const res = api("GET", "/api/session");
+async function ocSessionList(): Promise<Array<Record<string, any>>> {
+	const res = await api("GET", "/api/session");
 	if (!res.ok) return [];
 	const data = res.data as { data?: Array<Record<string, any>> } | Array<Record<string, any>>;
 	const list = Array.isArray(data) ? data : (data?.data ?? []);
 	return Array.isArray(list) ? list : [];
 }
 
-function ocMessageList(sessionID: string): Array<Record<string, any>> {
-	const res = api("GET", `/api/session/${encodeURIComponent(sessionID)}/message`);
+async function ocMessageList(sessionID: string): Promise<Array<Record<string, any>>> {
+	const res = await api("GET", `/api/session/${encodeURIComponent(sessionID)}/message`);
 	if (!res.ok) return [];
 	const data = res.data as { data?: Array<Record<string, any>> } | Array<Record<string, any>>;
 	const list = Array.isArray(data) ? data : (data?.data ?? []);
@@ -339,14 +363,14 @@ function isPiAlive(entry: PiRegistryEntry): boolean {
 	return Date.now() - (entry.ts ?? 0) < 90_000;
 }
 
-function resolveTarget(ref: string): Target | { error: string } {
+async function resolveTarget(ref: string): Promise<Target | { error: string }> {
 	const needle = ref.trim().toLowerCase();
 
 	const pi = piRegistry();
 	const exactPi = pi.find((e) => e.id === ref);
 	if (exactPi) return { kind: "pi", id: exactPi.id, name: exactPi.name, cwd: exactPi.cwd };
 
-	const oc = ocSessionList();
+	const oc = await ocSessionList();
 	const exactOc = oc.find((s) => s?.id === ref);
 	if (exactOc) return { kind: "opencode", id: exactOc.id, name: String(exactOc.title ?? exactOc.id), cwd: exactOc.location?.directory };
 
@@ -356,14 +380,7 @@ function resolveTarget(ref: string): Target | { error: string } {
 	];
 	if (matches.length === 1) return matches[0];
 	if (matches.length === 0) {
-		// Offline-queue promise (audit A finding H1): a bare id that matches nothing is
-		// queued blindly — the recipient may simply not have started yet, and the mail
-		// will be delivered on its first start. Names with whitespace are never queued
-		// blindly; those must match a live session first.
-		if (ref.length > 0 && !/\s/.test(ref)) {
-			return { kind: "pi", id: ref, name: ref, unregistered: true };
-		}
-		return { error: `No session matches "${ref}". Use list_sessions to see what is live.` };
+		return { error: `No session matches "${ref}". Use list_sessions to see live and registered sessions.` };
 	}
 	return {
 		error:
@@ -535,7 +552,7 @@ async function callTool(name: string, args: Record<string, any>): Promise<ToolRe
 				const state = e.stopped ? "stopped" : isPiAlive(e) ? "alive" : "stale";
 				lines.push(`[pi] ${e.id}  ${e.name}  cwd=${e.cwd ?? "?"}  ${state}`);
 			}
-			for (const s of ocSessionList()) {
+			for (const s of await ocSessionList()) {
 				const title = String(s.title ?? s.id);
 				if (search && !title.toLowerCase().includes(search)) continue;
 				const busy = (s.time?.busy ?? 0) > (s.time?.idle ?? 0);
@@ -545,7 +562,7 @@ async function callTool(name: string, args: Record<string, any>): Promise<ToolRe
 		}
 
 		case "read_session": {
-			const target = resolveTarget(String(args.session ?? ""));
+			const target = await resolveTarget(String(args.session ?? ""));
 			if ("error" in target) return fail(target.error);
 			const count = Math.max(1, Math.min(100, Number(args.count) || 10));
 			if (target.kind === "pi") {
@@ -570,7 +587,7 @@ async function callTool(name: string, args: Record<string, any>): Promise<ToolRe
 				if (tail.length === 0) return fail(`Session ${target.id} has no recorded output yet.`);
 				return ok(tail.map((e) => `[${new Date(e.ts).toLocaleString()}]\n${e.text}`).join("\n\n---\n\n"));
 			}
-			const messages = ocMessageList(target.id);
+			const messages = await ocMessageList(target.id);
 			if (messages.length === 0) return fail(`Session ${target.id} has no messages (or the OpenCode API refused the read).`);
 			// The API returns newest first; show the newest `count` in chronological order.
 			const tail = messages.slice(0, count).reverse();
@@ -581,28 +598,24 @@ async function callTool(name: string, args: Record<string, any>): Promise<ToolRe
 		}
 
 		case "send_session": {
-			const target = resolveTarget(String(args.to ?? ""));
+			const target = await resolveTarget(String(args.to ?? ""));
 			if ("error" in target) return fail(target.error);
 			const message = String(args.message ?? "").trim();
 			if (!message) return fail("message must not be empty.");
 			const from = String(args.from ?? "peer-agent");
 			if (target.kind === "pi") {
 				appendEnvelope(target, "msg", message, from);
-				return ok(
-					target.unregistered
-						? `Queued message to unregistered pi session ${target.id}: nobody is listening yet, the mail sits in its box and is delivered on its first start.`
-						: `Queued message to pi session ${target.id} (${target.name}).`,
-				);
+				return ok(`Queued message to pi session ${target.id} (${target.name}).`);
 			}
 			// OpenCode prompt body: {text}. The server queues it as a steer delivery and
 			// wakes the target agent — its native queued-message semantic.
-			const res = api("POST", `/api/session/${encodeURIComponent(target.id)}/prompt`, { text: message });
+			const res = await api("POST", `/api/session/${encodeURIComponent(target.id)}/prompt`, { text: message });
 			if (!res.ok) return fail(`OpenCode prompt failed: ${res.raw}`);
 			return ok(`Sent message to OpenCode session ${target.id} (${target.name}).`);
 		}
 
 		case "ask_session": {
-			const target = resolveTarget(String(args.to ?? ""));
+			const target = await resolveTarget(String(args.to ?? ""));
 			if ("error" in target) return fail(target.error);
 			const message = String(args.message ?? "").trim();
 			if (!message) return fail("message must not be empty.");
@@ -616,12 +629,13 @@ async function callTool(name: string, args: Record<string, any>): Promise<ToolRe
 				return ok(result.text ?? "(the target answered with no text)");
 			}
 			const sentAt = Date.now();
-			const sent = api("POST", `/api/session/${encodeURIComponent(target.id)}/prompt`, { text: message });
+			const sent = await api("POST", `/api/session/${encodeURIComponent(target.id)}/prompt`, { text: message });
 			if (!sent.ok) return fail(`OpenCode prompt failed: ${sent.raw}`);
-			// Preferred: the experimental wait endpoint blocks until the agent is idle again.
-			const waited = api("POST", `/api/experimental/session/${encodeURIComponent(target.id)}/wait`);
+			// Preferred: the experimental wait endpoint blocks asynchronously until the agent is idle again.
+			// Give wait a timeout linked directly to the requested timeoutMs (+5s grace).
+			const waited = await api("POST", `/api/experimental/session/${encodeURIComponent(target.id)}/wait`, undefined, timeoutMs + 5000);
 			if (waited.ok) {
-				const text = ocLastAssistantText(ocMessageList(target.id));
+				const text = ocLastAssistantText(await ocMessageList(target.id));
 				return ok(text || "(the target answered with no text)");
 			}
 			// Fallback: poll for a NEW assistant message (idle entries sit at the top of
@@ -629,7 +643,7 @@ async function callTool(name: string, args: Record<string, any>): Promise<ToolRe
 			const deadline = Date.now() + timeoutMs;
 			while (Date.now() < deadline) {
 				await new Promise((r) => setTimeout(r, 2000));
-				const messages = ocMessageList(target.id);
+				const messages = await ocMessageList(target.id);
 				const answer = messages.find((m) => {
 					if (m?.type !== "assistant") return false;
 					const ts = Number(m?.time?.completed ?? m?.time?.created ?? 0);
@@ -725,4 +739,5 @@ process.stdin.on("data", (chunk: string) => {
 		if (line) void handle(line);
 	}
 });
-process.stdin.on("end", () => process.exit(0));
+// Let Node.js exit naturally when stdin closes and all pending requests complete.
+process.stdin.on("end", () => {});
